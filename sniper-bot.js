@@ -3,7 +3,7 @@ import buyToken from "./buy-token.js";
 import sellToken from "./sell-token.js";
 import { checkLiquidity } from "./utils.js";
 
-let isRunning = false; // Prevent duplicate execution
+let isRunning = false;
 
 async function sniperBot() {
   if (isRunning) {
@@ -11,9 +11,9 @@ async function sniperBot() {
     return;
   }
 
-  isRunning = true;
+  isRunning = true; // Lock execution
   console.log("\n🚀 Sniper Bot Started!");
-  console.log("🔍 Fetching new token pools from Raydium...");
+  console.log("🔍 Fetching new token pools...");
 
   try {
     const newPools = await getNewPools();
@@ -21,42 +21,39 @@ async function sniperBot() {
 
     for (const pool of newPools) {
       console.log(`🔎 Checking liquidity for: ${pool}`);
+      if (await checkLiquidity(pool)) {
+        console.log(`🎯 Sniping: ${pool}`);
 
-      try {
-        if (await checkLiquidity(pool)) {
-          console.log(`🎯 Sniping: ${pool}`);
-
-          const buyTx = await buyToken(pool, 0.5);
-          console.log(`💰 Bought 0.5 SOL worth of ${pool}. TX: ${buyTx}`);
-
-          console.log("⏳ Waiting 30 seconds before selling...");
-          setTimeout(async () => {
-            try {
-              const sellTx = await sellToken(pool, 50_000_000);
-              console.log(`💸 Sold 50M tokens from ${pool}. TX: ${sellTx}`);
-            } catch (sellError) {
-              console.error(`❌ Sell failed for ${pool}:`, sellError);
-            }
-          }, 30000);
-        } else {
-          console.log(`❌ Skipping ${pool}, low liquidity`);
+        try {
+          const buyTx = await buyToken(pool, 0.5); // Buy with 0.5 SOL
+          console.log(`💰 Successfully bought from pool ${pool}. TX: ${buyTx}`);
+        } catch (error) {
+          console.error(`❌ Buy failed for ${pool}:`, error);
+          continue;
         }
-      } catch (liquidityError) {
-        console.error(
-          `⚠️ Error checking liquidity for ${pool}:`,
-          liquidityError
-        );
+
+        console.log(`⏳ Waiting 30 seconds before selling...`);
+        setTimeout(async () => {
+          try {
+            const sellTx = await sellToken(pool, 50_000_000);
+            console.log(`💸 Sold 50M tokens from ${pool}. TX: ${sellTx}`);
+          } catch (error) {
+            console.error(`❌ Sell failed for ${pool}:`, error);
+          }
+        }, 30000);
+      } else {
+        console.log(`❌ Skipping ${pool}, low liquidity`);
       }
     }
-  } catch (fetchError) {
+  } catch (error) {
     console.error(
       "❌ Error fetching new pools or processing transactions:",
-      fetchError
+      error
     );
   }
 
-  isRunning = false; // Allow next cycle to start
+  isRunning = false; // Unlock execution
 }
 
-// Run every 60 seconds
+// Run bot every 60 seconds
 setInterval(sniperBot, 60000);
